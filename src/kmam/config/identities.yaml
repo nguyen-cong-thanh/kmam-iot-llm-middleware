@@ -1,0 +1,17 @@
+# Mapping from a session credential (a token issued by the system) to a user identity.
+# Authenticator (FR1) uses this file to establish identity at the middleware, NOT trusting
+# any identity the agent claims. In the experiment, a token acts as a session credential.
+
+sessions:
+  token-admin-001:
+    user_id: alice
+    role: admin
+    attributes: {department: it}
+  token-operator-001:
+    user_id: bob
+    role: operator
+    attributes: {department: facilities}
+  token-guest-001:
+    user_id: carol
+    role: guest
+    attributes: {}

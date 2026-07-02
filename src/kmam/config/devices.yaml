@@ -1,0 +1,33 @@
+# Simulated device specifications.
+# Each device type has a set of allowed actions; each action declares a parameter schema
+# (data type and safe range). CommandValidator (FR3) uses this file as the whitelist.
+
+device_types:
+  smart_lock:
+    actions:
+      lock: {}
+      unlock: {}
+  light:
+    actions:
+      turn_on: {}
+      turn_off: {}
+      set_brightness:
+        params:
+          level: {type: int, min: 0, max: 100}
+  thermostat:
+    actions:
+      set_temperature:
+        params:
+          celsius: {type: int, min: 16, max: 30}
+
+# Concrete devices in the simulated environment, assigned to groups for authorization.
+devices:
+  - id: lock_front
+    type: smart_lock
+    group: locks
+  - id: light_living
+    type: light
+    group: lights
+  - id: ac_bedroom
+    type: thermostat
+    group: climate

@@ -1,0 +1,183 @@
+{
+  "access_control": {
+    "total": 10,
+    "correct": 10,
+    "accuracy": 1.0,
+    "results": [
+      {
+        "id": "KB1-001",
+        "group": "KB1",
+        "expected": "allow",
+        "predicted": "allow",
+        "stage": "middleware",
+        "correct": true
+      },
+      {
+        "id": "KB1-002",
+        "group": "KB1",
+        "expected": "allow",
+        "predicted": "allow",
+        "stage": "middleware",
+        "correct": true
+      },
+      {
+        "id": "KB1-003",
+        "group": "KB1",
+        "expected": "allow",
+        "predicted": "allow",
+        "stage": "middleware",
+        "correct": true
+      },
+      {
+        "id": "KB1-004",
+        "group": "KB1",
+        "expected": "allow",
+        "predicted": "allow",
+        "stage": "middleware",
+        "correct": true
+      },
+      {
+        "id": "KB2-001",
+        "group": "KB2",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "access_control",
+        "correct": true
+      },
+      {
+        "id": "KB2-002",
+        "group": "KB2",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "access_control",
+        "correct": true
+      },
+      {
+        "id": "KB2-003",
+        "group": "KB2",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "access_control",
+        "correct": true
+      },
+      {
+        "id": "KB3-001",
+        "group": "KB3",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "command_validation",
+        "correct": true
+      },
+      {
+        "id": "KB3-002",
+        "group": "KB3",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "command_validation",
+        "correct": true
+      },
+      {
+        "id": "KB3-003",
+        "group": "KB3",
+        "expected": "deny",
+        "predicted": "deny",
+        "stage": "command_validation",
+        "correct": true
+      }
+    ]
+  },
+  "injection_detection": {
+    "metrics": {
+      "tp": 6,
+      "fp": 0,
+      "tn": 6,
+      "fn": 0,
+      "total": 12,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "results": [
+      {
+        "id": "KB4-001",
+        "group": "KB4",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "KB4-002",
+        "group": "KB4",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "KB4-003",
+        "group": "KB4",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "KB4-004",
+        "group": "KB4",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "KB5-001",
+        "group": "KB5",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "KB5-002",
+        "group": "KB5",
+        "is_injection": true,
+        "predicted_injection": true
+      },
+      {
+        "id": "BEN-001",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      },
+      {
+        "id": "BEN-002",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      },
+      {
+        "id": "BEN-003",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      },
+      {
+        "id": "BEN-004",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      },
+      {
+        "id": "BEN-005",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      },
+      {
+        "id": "BEN-006",
+        "group": "benign",
+        "is_injection": false,
+        "predicted_injection": false
+      }
+    ]
+  },
+  "baseline": {
+    "attacks": 6,
+    "executed_without_middleware": 6,
+    "blocked_by_middleware": 6,
+    "attack_success_rate_without_middleware": 1.0,
+    "attack_success_rate_with_middleware": 0.0
+  }
+}

@@ -1,0 +1,25 @@
+# Access control policy: RBAC (role -> permissions over device groups) combined with
+# ABAC-style context conditions. AccessControlEngine (FR2) evaluates under default-deny:
+# a command is permitted only when it matches an allow rule and violates no condition.
+
+roles:
+  admin:
+    allow:
+      - {device_group: "*", action: "*"}
+  operator:
+    allow:
+      - {device_group: lights, action: "*"}
+      - {device_group: climate, action: "*"}
+  guest:
+    allow:
+      - {device_group: lights, action: turn_on}
+      - {device_group: lights, action: turn_off}
+
+# Additional attribute/context conditions (ABAC). Example: an operator may set the
+# temperature only within the allowed time window.
+conditions:
+  - role: operator
+    device_group: climate
+    action: set_temperature
+    require:
+      time_between: ["06:00", "22:00"]

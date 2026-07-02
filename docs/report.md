@@ -283,6 +283,518 @@ các nguy cơ an toàn thông tin đặc thù và xác định vai trò của mi
 kiểm soát truy cập trung gian. Những nội dung này là cơ sở để phân tích yêu cầu bảo mật và các
 mô hình kiểm soát truy cập trong Chương II.
 
+# CHƯƠNG II. PHÂN TÍCH YÊU CẦU BẢO MẬT VÀ MÔ HÌNH KIỂM SOÁT TRUY CẬP TRONG HỆ THỐNG IoT SỬ DỤNG LLM AGENT
+
+Trên cơ sở tổng quan và các nguy cơ đã trình bày ở Chương I, chương này đi sâu phân tích kiến
+trúc hệ thống điều khiển thiết bị IoT sử dụng LLM Agent nhằm xác định các điểm yếu bảo mật, từ
+đó rút ra các yêu cầu kiểm soát truy cập cần thiết. Tiếp theo, chương trình bày các mô hình kiểm
+soát truy cập phù hợp để áp dụng và tổng hợp thành tập yêu cầu chức năng cùng yêu cầu phi chức
+năng làm cơ sở cho việc thiết kế middleware ở Chương III.
+
+## 2.1. Phân tích kiến trúc hệ thống điều khiển IoT sử dụng LLM Agent
+
+Mục này phân tích kiến trúc của một hệ thống điều khiển IoT điển hình khi chưa có lớp kiểm soát
+trung gian, làm rõ cách LLM Agent kết nối tới thiết bị, luồng xử lý một lệnh điều khiển và các
+điểm yếu bảo mật phát sinh. Đây là căn cứ trực tiếp để xác định yêu cầu kiểm soát truy cập ở mục
+2.2.
+
+### 2.1.1. Mô hình kết nối giữa LLM Agent và thiết bị IoT
+
+Trong một hệ thống điều khiển IoT sử dụng LLM Agent, có thể phân tách bốn thành phần tham gia
+vào quá trình điều khiển. Người dùng đưa ra yêu cầu bằng ngôn ngữ tự nhiên. LLM Agent gồm mô
+hình ngôn ngữ làm trung tâm suy luận và một lớp công cụ (tool) được khai báo để agent có thể gọi.
+Lớp công cụ đóng vai trò bộ chuyển đổi (adapter), ánh xạ mỗi lời gọi của agent thành một lệnh
+giao thức cụ thể như MQTT, CoAP hoặc HTTP. Cuối cùng là các thiết bị IoT trực tiếp thực thi lệnh
+trên môi trường vật lý.
+
+Trong mô hình tích hợp phổ biến, agent được trao quyền gọi trực tiếp các công cụ điều khiển, và
+mỗi công cụ thường được lập trình để chuyển ngay lời gọi thành lệnh tác động lên thiết bị. Việc
+kết nối có thể thực hiện theo hai cách tổ chức chính, hoặc agent gọi trực tiếp tới API của thiết
+bị và gateway, hoặc agent phát thông điệp qua một message broker trung gian để thiết bị nhận và
+thực thi. Trong cả hai cách, điểm chung là không tồn tại một thành phần độc lập nào kiểm tra
+quyền và tính hợp lệ của lệnh trước khi nó tới thiết bị, như minh họa ở Hình 2.1.
+
+```mermaid
+flowchart LR
+    U["Người dùng"] --> AG["LLM Agent<br/>(mô hình ngôn ngữ + lớp công cụ)"]
+    AG --> AD["Lớp công cụ / adapter<br/>(ánh xạ sang MQTT, CoAP, HTTP)"]
+    AD --> D1["Thiết bị IoT 1"]
+    AD --> D2["Thiết bị IoT 2"]
+    AD --> D3["Thiết bị IoT n"]
+```
+
+<div align="center"><em>Hình 2.1. Mô hình kết nối trực tiếp giữa LLM Agent và thiết bị IoT khi chưa có lớp kiểm soát trung gian</em></div>
+
+### 2.1.2. Luồng xử lý lệnh điều khiển thiết bị
+
+Quá trình xử lý một lệnh điều khiển trong kiến trúc nói trên diễn ra qua nhiều bước. Người dùng
+gửi yêu cầu bằng ngôn ngữ tự nhiên tới agent. Mô hình ngôn ngữ diễn giải ý định, lựa chọn công
+cụ phù hợp và sinh ra tham số cho lời gọi. Lớp công cụ tiếp nhận lời gọi, dịch thành lệnh giao
+thức và gửi tới thiết bị. Thiết bị thực thi lệnh và trả về kết quả, sau đó agent tổng hợp và
+phản hồi lại cho người dùng. Trình tự này được minh họa ở Hình 2.2.
+
+```mermaid
+sequenceDiagram
+    participant U as Người dùng
+    participant AG as LLM Agent
+    participant AD as Lớp công cụ / adapter
+    participant D as Thiết bị IoT
+    U->>AG: Yêu cầu bằng ngôn ngữ tự nhiên
+    AG->>AG: Diễn giải ý định, chọn công cụ và tham số
+    AG->>AD: Lời gọi công cụ
+    AD->>D: Lệnh giao thức (MQTT/CoAP/HTTP)
+    D-->>AD: Kết quả thực thi
+    AD-->>AG: Phản hồi
+    AG-->>U: Trả lời tổng hợp
+```
+
+<div align="center"><em>Hình 2.2. Luồng xử lý một lệnh điều khiển thiết bị qua LLM Agent</em></div>
+
+Điểm đáng chú ý trong luồng này là toàn bộ quyết định về việc gọi công cụ nào và với tham số ra
+sao đều nằm bên trong agent, một thành phần mang bản chất xác suất và chịu ảnh hưởng trực tiếp
+bởi nội dung đầu vào. Mọi dữ liệu mà agent tiếp nhận trong quá trình xử lý, kể cả phản hồi từ
+thiết bị, đều có thể tác động tới các bước suy luận tiếp theo. Ranh giới tin cậy (trust boundary)
+vì vậy bị đặt sai chỗ khi hệ thống mặc nhiên tin tưởng đầu ra của agent là hợp lệ.
+
+### 2.1.3. Các điểm yếu bảo mật trong kiến trúc hệ thống
+
+Phân tích kiến trúc và luồng xử lý ở trên cho thấy một số điểm yếu bảo mật có tính hệ thống. Thứ
+nhất, do mô hình ngôn ngữ không tách biệt chỉ thị và dữ liệu, đầu vào từ người dùng hoặc từ phản
+hồi của thiết bị có thể chứa chỉ thị độc hại và dẫn tới prompt injection. Thứ hai, agent được tin
+cậy quá mức khi mọi lời gọi công cụ do nó sinh ra đều được thực thi ngay mà không qua bước kiểm
+tra độc lập, tạo điều kiện cho hành vi điều khiển trái phép. Thứ ba, agent thường hoạt động với
+một tập quyền gộp chung cho nhiều người dùng, trong khi việc phân quyền theo từng người dùng và
+từng thiết bị không được thực hiện lại ở bất kỳ điểm nào, dẫn tới nguy cơ leo thang đặc quyền.
+
+Bên cạnh đó, kiến trúc thiếu cơ chế xác thực danh tính của agent trước khi nó tác động tới thiết
+bị, thiếu bước kiểm tra tính hợp lệ của lệnh điều khiển ở mức tham số và ngưỡng an toàn, và
+thường thiếu nhật ký kiểm toán đầy đủ để truy vết hành vi. Các điểm yếu này tương ứng trực tiếp
+với những nguy cơ đã nêu ở mục 1.3 và cho thấy nhu cầu tách phần thực thi chính sách an ninh ra
+khỏi agent, đặt vào một thành phần trung gian độc lập. Đây chính là động cơ cho các yêu cầu kiểm
+soát truy cập được phân tích ở mục tiếp theo.
+
+## 2.2. Phân tích yêu cầu kiểm soát truy cập thiết bị IoT
+
+Từ các điểm yếu đã xác định, có thể rút ra ba nhóm yêu cầu kiểm soát truy cập cốt lõi mà hệ
+thống cần đáp ứng, lần lượt tương ứng với ba câu hỏi: chủ thể phát lệnh là ai, chủ thể đó được
+phép làm gì, và bản thân lệnh có hợp lệ hay không. Ba nhóm yêu cầu này cần được thực thi tại một
+điểm trung gian độc lập với agent, vì agent là thành phần dễ bị thao túng và không thể tự bảo
+đảm tính đúng đắn của quyết định mà nó đưa ra.
+
+### 2.2.1. Xác thực truy cập thiết bị
+
+Yêu cầu đầu tiên là xác thực được danh tính của chủ thể phát lệnh trước khi cho phép bất kỳ tác
+động nào tới thiết bị. Trong hệ thống điều khiển dùng LLM Agent, cần phân biệt hai cấp danh tính.
+Cấp thứ nhất là danh tính người dùng đứng sau yêu cầu, quyết định phạm vi quyền hạn thực tế. Cấp
+thứ hai là danh tính của chính agent hoặc phiên làm việc đang thay mặt người dùng để tương tác
+với thiết bị.
+
+Hệ thống không được tin tưởng danh tính do agent tự khai báo trong nội dung lời gọi, bởi nội
+dung này có thể bị prompt injection chi phối. Thay vào đó, danh tính cần được xác lập và kiểm
+chứng tại điểm trung gian thông qua các cơ chế độc lập như khóa API, token có chữ ký hoặc xác
+thực lẫn nhau ở tầng kết nối. Mỗi yêu cầu điều khiển phải được gắn với một danh tính đã xác thực,
+làm cơ sở cho bước phân quyền tiếp theo.
+
+### 2.2.2. Phân quyền truy cập thiết bị
+
+Sau khi xác thực, hệ thống phải xác định chủ thể được phép thực hiện hành động nào trên thiết bị
+hoặc nhóm thiết bị nào. Yêu cầu cốt lõi ở đây là tuân thủ nguyên tắc đặc quyền tối thiểu, theo đó
+mỗi chủ thể chỉ được cấp đúng tập quyền cần thiết cho nhiệm vụ của mình. Quyền truy cập cần được
+biểu diễn ở mức chi tiết theo bộ ba chủ thể, thiết bị và hành động, thay vì chỉ phân quyền thô
+cho toàn bộ agent.
+
+Điểm mấu chốt là việc kiểm tra quyền phải được thực hiện lại cho từng lệnh tại điểm trung gian,
+ngay cả khi lệnh đó do agent sinh ra. Đây là cách trực tiếp để hóa giải vấn đề đại diện nhầm lẫn
+đã nêu ở mục 1.3.3, khi agent nắm quyền gộp của nhiều người dùng. Ngoài ra, nhiều tình huống
+thực tế đòi hỏi quyết định phân quyền phụ thuộc vào ngữ cảnh như thời điểm trong ngày hay trạng
+thái hiện tại của thiết bị, nên mô hình phân quyền cần đủ linh hoạt để biểu diễn các điều kiện
+này, định hướng tới các mô hình trình bày ở mục 2.3.
+
+### 2.2.3. Kiểm soát lệnh điều khiển thiết bị
+
+Ngay cả khi chủ thể đã được xác thực và có quyền, bản thân lệnh điều khiển vẫn cần được kiểm tra
+tính hợp lệ trước khi thực thi. Yêu cầu này gồm việc kiểm tra định dạng và cú pháp của lệnh, xác
+minh hành động nằm trong tập thao tác được phép của thiết bị, và bảo đảm các tham số nằm trong
+ngưỡng an toàn cho phép. Cách tiếp cận an toàn là định nghĩa danh sách cho phép (whitelist) các
+hành động và khoảng giá trị hợp lệ, thay vì cố gắng liệt kê các trường hợp bị cấm.
+
+Bên cạnh kiểm tra hợp lệ ở mức tham số, lớp kiểm soát lệnh còn cần khả năng phát hiện các dấu
+hiệu bất thường nhằm ngăn chặn prompt injection ngay trước khi lệnh tác động tới thiết bị. Cuối
+cùng, mọi lệnh dù được chấp nhận hay từ chối đều phải được ghi nhật ký đầy đủ để phục vụ truy
+vết và kiểm toán. Mối liên hệ giữa ba nhóm yêu cầu và các nguy cơ tương ứng được tổng hợp trong
+Bảng 2.1.
+
+<div align="center"><em>Bảng 2.1. Ánh xạ các nhóm yêu cầu kiểm soát truy cập với nguy cơ cần phòng chống</em></div>
+
+| Nhóm yêu cầu | Mục tiêu chính | Nguy cơ liên quan |
+| --- | --- | --- |
+| Xác thực (authentication) | Xác định và kiểm chứng danh tính agent và người dùng tại điểm trung gian | Điều khiển trái phép, leo thang đặc quyền |
+| Phân quyền (authorization) | Kiểm tra quyền theo đặc quyền tối thiểu cho từng lệnh | Leo thang đặc quyền, điều khiển trái phép |
+| Kiểm soát lệnh (command validation) | Hợp lệ hóa lệnh, giới hạn tham số và phát hiện chỉ thị bất thường | Prompt injection, điều khiển trái phép, rò rỉ dữ liệu |
+
+Ba nhóm yêu cầu trên bổ sung cho nhau và cần được thực thi tuần tự trên cùng một điểm trung gian.
+Việc thiếu bất kỳ nhóm nào đều để lại lỗ hổng tương ứng với một nguy cơ đã phân tích ở Chương I.
+Phần tiếp theo trình bày các mô hình kiểm soát truy cập có thể được áp dụng để hiện thực hóa các
+yêu cầu này.
+
+## 2.3. Các mô hình kiểm soát truy cập áp dụng cho hệ thống IoT
+
+Để hiện thực hóa các yêu cầu phân quyền ở mục 2.2, có thể vận dụng các mô hình kiểm soát truy
+cập kinh điển. Mục này phân tích ba mô hình tiêu biểu là RBAC, ABAC và kiểm soát dựa trên chính
+sách, đồng thời đối chiếu mức độ phù hợp của chúng với đặc thù của hệ thống điều khiển IoT sử
+dụng LLM Agent.
+
+### 2.3.1. Mô hình kiểm soát truy cập dựa trên vai trò (RBAC)
+
+Mô hình kiểm soát truy cập dựa trên vai trò (Role-Based Access Control - RBAC) gán quyền cho các
+vai trò thay vì gán trực tiếp cho từng chủ thể, sau đó gán vai trò cho chủ thể [9]. Quyền truy
+cập của một chủ thể được suy ra qua các vai trò mà chủ thể đảm nhận. Trong hệ thống điều khiển
+IoT, các vai trò có thể tương ứng với quản trị viên, người vận hành hoặc khách, mỗi vai trò được
+cấp quyền thao tác trên những nhóm thiết bị nhất định.
+
+Ưu điểm của RBAC là đơn giản, trực quan và dễ quản trị khi tập vai trò tương đối ổn định. Tuy
+nhiên mô hình này kém linh hoạt khi cần ra quyết định phụ thuộc vào ngữ cảnh, và dễ rơi vào tình
+trạng bùng nổ vai trò khi số tổ hợp quyền cần biểu diễn tăng nhanh. Do đó RBAC phù hợp làm lớp
+phân quyền nền tảng nhưng thường chưa đủ để đáp ứng các yêu cầu phụ thuộc điều kiện.
+
+### 2.3.2. Mô hình kiểm soát truy cập dựa trên thuộc tính (ABAC)
+
+Mô hình kiểm soát truy cập dựa trên thuộc tính (Attribute-Based Access Control - ABAC) ra quyết
+định dựa trên các thuộc tính của chủ thể, đối tượng, hành động và môi trường, được đánh giá theo
+các quy tắc đã định nghĩa [10]. Thay vì hỏi chủ thể giữ vai trò nào, ABAC đánh giá tổ hợp thuộc
+tính như phòng ban của người dùng, mức độ nhạy cảm của thiết bị hay thời điểm yêu cầu để đưa ra
+phán quyết cho phép hoặc từ chối.
+
+Ưu điểm nổi bật của ABAC là khả năng biểu diễn các điều kiện ngữ cảnh một cách linh hoạt, phù hợp
+với những tình huống mà quyền truy cập thay đổi theo trạng thái hệ thống. Đổi lại, ABAC phức tạp
+hơn trong quản trị, khó kiểm toán và đánh giá tính đúng đắn, đồng thời chi phí đánh giá quy tắc
+khi vận hành cũng cao hơn so với RBAC.
+
+### 2.3.3. Mô hình kiểm soát truy cập dựa trên chính sách (Policy-based access control)
+
+Kiểm soát truy cập dựa trên chính sách (policy-based access control) tách biệt logic phân quyền
+khỏi mã ứng dụng và biểu diễn nó thành các chính sách tường minh, được một bộ máy đánh giá chính
+sách xử lý khi có yêu cầu. Cách tiếp cận này được thể hiện trong các chuẩn và công cụ như XACML
+hay các bộ máy chính sách hiện đại kiểu Open Policy Agent. Về bản chất, đây là một khung tổng
+quát có thể bao hàm cả RBAC và ABAC, khi vai trò và thuộc tính đều có thể được biểu diễn dưới
+dạng dữ kiện đầu vào cho chính sách.
+
+Ưu điểm của mô hình này là tính linh hoạt cao, khả năng tập trung hóa và thay đổi chính sách mà
+không phải sửa mã, cùng khả năng kiểm thử chính sách một cách độc lập. Nhược điểm là cần một bộ
+máy đánh giá riêng và đòi hỏi quy trình quản lý vòng đời chính sách chặt chẽ. Bảng 2.2 đối chiếu
+ba mô hình theo các tiêu chí quan trọng đối với hệ thống điều khiển IoT.
+
+<div align="center"><em>Bảng 2.2. So sánh các mô hình kiểm soát truy cập theo đặc thù hệ thống IoT điều khiển bằng LLM Agent</em></div>
+
+| Tiêu chí | RBAC | ABAC | Policy-based |
+| --- | --- | --- | --- |
+| Cơ sở ra quyết định | Vai trò của chủ thể | Thuộc tính của chủ thể, đối tượng, môi trường | Chính sách tường minh dựa trên dữ kiện đầu vào |
+| Mức độ chi tiết | Theo vai trò và nhóm thiết bị | Theo từng thuộc tính, rất chi tiết | Tùy theo chính sách, có thể rất chi tiết |
+| Khả năng theo ngữ cảnh | Hạn chế | Tốt | Tốt |
+| Độ phức tạp quản trị | Thấp | Cao | Trung bình đến cao |
+| Khả năng kiểm toán | Dễ | Khó hơn | Dễ nếu chính sách được tập trung hóa |
+
+Từ phân tích trên, không có mô hình đơn lẻ nào đáp ứng trọn vẹn mọi yêu cầu của hệ thống điều
+khiển IoT sử dụng LLM Agent. Hướng tiếp cận hợp lý là kết hợp, lấy RBAC làm lớp phân quyền nền
+tảng theo vai trò, bổ sung các điều kiện theo thuộc tính và ngữ cảnh theo tinh thần ABAC, và biểu
+diễn toàn bộ dưới dạng chính sách tường minh để dễ quản lý và kiểm toán. Định hướng kết hợp này
+là cơ sở cho thiết kế cơ chế kiểm soát truy cập của middleware ở Chương III.
+
+## 2.4. Phân tích yêu cầu xây dựng middleware bảo mật
+
+Tổng hợp các phân tích ở những mục trước, phần này xác định tập yêu cầu mà middleware bảo mật
+cần đáp ứng, bao gồm yêu cầu chức năng mô tả các năng lực bắt buộc phải có và yêu cầu phi chức
+năng mô tả các ràng buộc về chất lượng vận hành. Tập yêu cầu này là đầu vào trực tiếp cho thiết
+kế và thực nghiệm ở Chương III.
+
+### 2.4.1. Yêu cầu chức năng
+
+Các yêu cầu chức năng được rút ra từ ba nhóm yêu cầu kiểm soát truy cập ở mục 2.2 và định hướng
+mô hình ở mục 2.3. Middleware phải xác thực được danh tính của agent và người dùng đứng sau mỗi
+yêu cầu trước khi cho phép tác động tới thiết bị. Trên cơ sở danh tính đó, middleware kiểm tra
+quyền truy cập cho từng lệnh theo nguyên tắc đặc quyền tối thiểu, sử dụng mô hình kết hợp vai trò
+và thuộc tính được biểu diễn dưới dạng chính sách. Mỗi lệnh điều khiển còn phải được kiểm tra
+tính hợp lệ về hành động và tham số, đồng thời được rà soát dấu hiệu prompt injection trước khi
+thực thi. Cuối cùng, mọi quyết định cho phép hoặc từ chối đều phải được ghi nhật ký phục vụ kiểm
+toán. Các yêu cầu chức năng được mã hóa và tổng hợp trong Bảng 2.3 để thuận tiện cho việc truy
+vết sang phần thiết kế và kiểm thử.
+
+<div align="center"><em>Bảng 2.3. Tập yêu cầu chức năng của middleware bảo mật</em></div>
+
+| Mã | Yêu cầu chức năng | Mô tả tóm tắt |
+| --- | --- | --- |
+| FR1 | Xác thực agent và người dùng | Kiểm chứng danh tính tại điểm trung gian, không tin danh tính do agent tự khai |
+| FR2 | Kiểm soát quyền truy cập | Đánh giá quyền cho từng lệnh theo mô hình kết hợp vai trò và thuộc tính dạng chính sách |
+| FR3 | Kiểm tra hợp lệ lệnh điều khiển | Xác minh hành động và tham số nằm trong danh sách cho phép và ngưỡng an toàn |
+| FR4 | Phát hiện prompt injection | Rà soát dấu hiệu chỉ thị bất thường trong yêu cầu trước khi thực thi |
+| FR5 | Ghi nhật ký kiểm toán | Lưu vết mọi lệnh cùng kết quả phán quyết để phục vụ truy vết |
+
+Một nguyên tắc xuyên suốt các yêu cầu trên là mặc định từ chối, theo đó một lệnh chỉ được thực
+thi khi vượt qua đầy đủ các bước kiểm tra, còn trong mọi trường hợp không xác định được tính hợp
+lệ thì lệnh phải bị từ chối.
+
+### 2.4.2. Yêu cầu phi chức năng
+
+Bên cạnh các năng lực chức năng, middleware còn phải thỏa mãn một số yêu cầu về chất lượng vận
+hành. Về hiệu năng, do middleware nằm trên đường đi của mọi lệnh điều khiển, độ trễ tăng thêm và
+chi phí xử lý mà nó tạo ra phải đủ nhỏ để không ảnh hưởng đáng kể tới trải nghiệm điều khiển. Về
+khả năng mở rộng, middleware phải vận hành ổn định khi số lượng thiết bị, người dùng và quy tắc
+chính sách tăng lên, đồng thời cho phép bổ sung thiết bị và chính sách mới mà không phải sửa đổi
+phần lõi.
+
+Về khả năng tích hợp, middleware cần ghép nối được với các framework agent phổ biến mà không đòi
+hỏi thay đổi sâu kiến trúc của agent. Trong phạm vi thực nghiệm của báo cáo, yêu cầu này được cụ
+thể hóa bằng việc tích hợp với LangChain thông qua các cơ chế mở rộng sẵn có của framework. Ngoài
+ra, để phục vụ mục tiêu đánh giá khách quan, phần lõi kiểm soát truy cập và phát hiện prompt
+injection cần được thiết kế sao cho có thể kiểm thử tự động và cho kết quả tái lập được, làm cơ
+sở tạo ra số liệu đánh giá ở Chương III.
+
+Kết lại, Chương II đã phân tích kiến trúc và điểm yếu của hệ thống điều khiển IoT sử dụng LLM
+Agent, xác định ba nhóm yêu cầu kiểm soát truy cập, đối chiếu các mô hình kiểm soát truy cập phù
+hợp và tổng hợp thành tập yêu cầu chức năng cùng yêu cầu phi chức năng cho middleware. Đây là cơ
+sở để đề xuất kiến trúc, thiết kế cơ chế và tiến hành thực nghiệm middleware trong Chương III.
+
+# CHƯƠNG III. ĐỀ XUẤT MÔ HÌNH MIDDLEWARE BẢO MẬT KIỂM SOÁT TRUY CẬP THIẾT BỊ IoT TRONG HỆ THỐNG ĐIỀU KHIỂN SỬ DỤNG LLM AGENT
+
+Chương này trình bày đóng góp chính của đề tài. Trên cơ sở tập yêu cầu đã xác định ở Chương II,
+chương đề xuất kiến trúc tổng thể của middleware bảo mật, thiết kế chi tiết các cơ chế kiểm soát
+truy cập và phát hiện prompt injection, sau đó xây dựng thử nghiệm trong môi trường mô phỏng và
+đánh giá hiệu quả của mô hình. Middleware được đặt tên là KMAM (KMA Middleware) và được thiết kế
+như một điểm thực thi chính sách độc lập nằm giữa LLM Agent và thiết bị IoT.
+
+## 3.1. Kiến trúc tổng thể mô hình middleware đề xuất
+
+Kiến trúc của KMAM tuân theo nguyên tắc tách phần thực thi chính sách an ninh ra khỏi agent và
+đặt nó vào một thành phần trung gian độc lập. Mọi lệnh điều khiển do agent sinh ra đều bị chặn
+lại tại middleware và chỉ được chuyển tiếp tới thiết bị sau khi vượt qua đầy đủ các bước kiểm
+tra. Middleware gồm năm thành phần xử lý chính, mỗi thành phần đảm nhận một yêu cầu chức năng đã
+nêu ở Bảng 2.3, gồm bộ xác thực (Authenticator), bộ phát hiện prompt injection
+(PromptInjectionDetector), bộ kiểm soát truy cập (AccessControlEngine), bộ kiểm tra lệnh
+(CommandValidator) và bộ ghi nhật ký (AuditLogger). Các thành phần này được điều phối bởi một
+đường ống xử lý trung tâm và sẽ là các module tương ứng trong phần mã nguồn ở `src/`.
+
+```mermaid
+flowchart LR
+    U["Người dùng"] --> AG["LLM Agent<br/>(xây dựng trên LangChain)"]
+    AG -->|"lời gọi công cụ"| MW
+    subgraph MW["Middleware KMAM"]
+        direction TB
+        AU["Authenticator"] --> PID["PromptInjectionDetector<br/>(luật + LLM)"]
+        PID --> ACE["AccessControlEngine<br/>(RBAC + ABAC / policy)"]
+        ACE --> CV["CommandValidator"]
+        CV --> AL["AuditLogger"]
+    end
+    MW -->|"lệnh hợp lệ"| SIM["Trình mô phỏng thiết bị IoT"]
+    SIM --> D1["Thiết bị 1"]
+    SIM --> D2["Thiết bị n"]
+    POL["Kho chính sách<br/>(vai trò, thuộc tính, quy tắc)"] -.-> ACE
+    LOG["Nhật ký kiểm toán"] -.-> AL
+```
+
+<div align="center"><em>Hình 3.1. Kiến trúc tổng thể của middleware bảo mật KMAM</em></div>
+
+### 3.1.1. Mô hình kết nối middleware với LLM Agent
+
+KMAM được kết nối với LLM Agent ở ranh giới giữa quyết định của agent và hành động thực tế lên
+thiết bị. Trong thực nghiệm, agent được xây dựng trên LangChain và sử dụng một mô hình ngôn ngữ
+lớn để diễn giải yêu cầu của người dùng thành các lời gọi công cụ, các mô hình cụ thể được dùng
+để đánh giá sẽ được trình bày ở mục 3.3. Thay vì để mỗi công cụ tác động trực tiếp
+lên thiết bị, các công cụ điều khiển được bọc lại để mọi lời gọi đều được chuyển qua middleware
+trước. Nhờ vậy, middleware tiếp nhận đầy đủ thông tin của một yêu cầu điều khiển gồm danh tính
+phiên làm việc, nội dung yêu cầu gốc của người dùng, công cụ được chọn và tham số kèm theo.
+
+Cách ghép nối này không đòi hỏi sửa đổi bên trong mô hình ngôn ngữ và tận dụng cơ chế mở rộng sẵn
+có của LangChain, qua đó đáp ứng yêu cầu về khả năng tích hợp framework agent ở mục 2.4.2. Quan
+trọng hơn, middleware không tin tưởng danh tính hay tuyên bố do agent tự sinh, mà chỉ dựa trên
+danh tính phiên đã được xác thực độc lập để ra quyết định.
+
+### 3.1.2. Mô hình kết nối middleware với thiết bị IoT
+
+Ở phía thiết bị, KMAM kết nối tới một trình mô phỏng thiết bị IoT thay cho phần cứng thật. Trình
+mô phỏng cung cấp một tập thiết bị có trạng thái và một tập hành động điều khiển được định nghĩa
+rõ ràng cho từng loại thiết bị, ví dụ khóa cửa với hành động mở và đóng, hay điều hòa với hành
+động đặt nhiệt độ trong một khoảng giá trị. Chỉ những lệnh đã vượt qua toàn bộ các bước kiểm tra
+của middleware mới được chuyển tới trình mô phỏng để thực thi và làm thay đổi trạng thái thiết
+bị.
+
+Việc sử dụng trình mô phỏng giúp tái lập thí nghiệm một cách nhất quán và an toàn, đồng thời cho
+phép định nghĩa trước tập hành động hợp lệ và ngưỡng tham số an toàn của từng thiết bị, làm cơ sở
+cho bước kiểm tra lệnh. Mô hình kết nối hai phía của middleware đã được thể hiện tổng quát ở Hình
+3.1.
+
+### 3.1.3. Luồng xử lý kiểm soát truy cập trong middleware
+
+Khi nhận được một yêu cầu điều khiển từ agent, middleware xử lý tuần tự qua các bước kiểm tra
+theo nguyên tắc mặc định từ chối. Trước hết, Authenticator xác thực danh tính phiên và xác định
+người dùng đứng sau yêu cầu. Tiếp theo, PromptInjectionDetector rà soát yêu cầu để phát hiện dấu
+hiệu prompt injection. Sau đó, AccessControlEngine đánh giá quyền của chủ thể đối với hành động
+và thiết bị mục tiêu, còn CommandValidator kiểm tra tính hợp lệ của hành động và tham số. Chỉ khi
+tất cả các bước đều thành công, lệnh mới được chuyển tới trình mô phỏng thiết bị. Ở bất kỳ bước
+nào, nếu kiểm tra thất bại hoặc không xác định được tính hợp lệ, lệnh lập tức bị từ chối. Mọi
+quyết định cho phép hoặc từ chối đều được AuditLogger ghi lại. Trình tự này được minh họa ở Hình
+3.2.
+
+```mermaid
+flowchart TD
+    R["Yêu cầu điều khiển từ agent"] --> A{"Xác thực thành công?"}
+    A -- "Không" --> DENY["Từ chối lệnh"]
+    A -- "Có" --> P{"Có dấu hiệu prompt injection?"}
+    P -- "Có" --> DENY
+    P -- "Không" --> Z{"Chủ thể có quyền?"}
+    Z -- "Không" --> DENY
+    Z -- "Có" --> V{"Lệnh và tham số hợp lệ?"}
+    V -- "Không" --> DENY
+    V -- "Có" --> EXEC["Thực thi trên thiết bị mô phỏng"]
+    DENY --> LOG["Ghi nhật ký kiểm toán"]
+    EXEC --> LOG
+```
+
+<div align="center"><em>Hình 3.2. Luồng xử lý kiểm soát truy cập trong middleware KMAM</em></div>
+
+## 3.2. Thiết kế cơ chế kiểm soát truy cập trong middleware
+
+Mục này trình bày thiết kế chi tiết của bốn cơ chế tương ứng với các thành phần xử lý của KMAM.
+Mỗi cơ chế được mô tả ở mức đủ để triển khai thành mã nguồn và kiểm thử, đồng thời giữ tính độc
+lập với mô hình ngôn ngữ cụ thể được sử dụng.
+
+### 3.2.1. Cơ chế xác thực LLM Agent
+
+Cơ chế xác thực được hiện thực trong thành phần Authenticator. Mỗi phiên làm việc của agent được
+cấp một thông tin xác thực độc lập, chẳng hạn một khóa hoặc token có thể kiểm chứng, do hệ thống
+phát hành chứ không do agent tự sinh. Khi một yêu cầu điều khiển tới middleware, Authenticator
+kiểm chứng thông tin xác thực này và ánh xạ phiên tương ứng tới một danh tính người dùng đã biết
+cùng các thuộc tính của người dùng đó như vai trò và phạm vi quản lý.
+
+Kết quả của bước xác thực là một ngữ cảnh yêu cầu đã được xác lập danh tính, bao gồm định danh
+người dùng, vai trò, các thuộc tính liên quan, cùng hành động và thiết bị mục tiêu được trích ra
+từ lời gọi công cụ. Ngữ cảnh này là đầu vào cho các bước kiểm tra tiếp theo. Mọi yêu cầu không
+kèm thông tin xác thực hợp lệ đều bị từ chối ngay, đúng theo nguyên tắc mặc định từ chối. Điểm
+cốt lõi là danh tính dùng để phân quyền luôn được xác lập tại middleware, không phụ thuộc vào bất
+kỳ tuyên bố nào nằm trong nội dung do agent sinh ra.
+
+### 3.2.2. Cơ chế kiểm tra quyền truy cập thiết bị
+
+Cơ chế kiểm tra quyền được hiện thực trong thành phần AccessControlEngine, theo mô hình kết hợp
+đã định hướng ở mục 2.3. Ở lớp nền, mô hình vai trò gán cho mỗi vai trò một tập quyền trên các
+nhóm thiết bị, ví dụ vai trò người vận hành được phép điều khiển nhóm thiết bị chiếu sáng nhưng
+không được tác động tới nhóm khóa cửa. Trên lớp đó, các điều kiện theo thuộc tính và ngữ cảnh
+được bổ sung để tinh chỉnh quyết định, ví dụ chỉ cho phép một hành động trong khung giờ nhất định
+hoặc khi thiết bị đang ở một trạng thái phù hợp.
+
+Toàn bộ quy tắc phân quyền được biểu diễn dưới dạng chính sách tường minh và được đánh giá theo
+nguyên tắc mặc định từ chối, tức một yêu cầu chỉ được chấp thuận khi tồn tại một quy tắc cho phép
+và không vi phạm điều kiện nào. Đầu vào của bước đánh giá là ngữ cảnh yêu cầu đã xác thực, gồm
+chủ thể với vai trò và thuộc tính, thiết bị mục tiêu và hành động yêu cầu. Đầu ra là một phán
+quyết cho phép hoặc từ chối kèm lý do, phục vụ cho việc ghi nhật ký. Việc kiểm tra được thực hiện
+lại cho từng lệnh, qua đó loại bỏ khả năng lợi dụng quyền gộp của agent để leo thang đặc quyền.
+
+### 3.2.3. Cơ chế kiểm tra hợp lệ lệnh điều khiển
+
+Ngay cả khi một chủ thể có quyền thực hiện hành động trên thiết bị, cơ chế kiểm tra hợp lệ trong
+thành phần CommandValidator vẫn xác minh bản thân lệnh trước khi cho thực thi. Mỗi loại thiết bị
+được gắn một đặc tả gồm tập hành động được phép và lược đồ tham số tương ứng, trong đó quy định
+kiểu dữ liệu và khoảng giá trị an toàn của từng tham số. Lệnh chỉ được coi là hợp lệ khi hành
+động nằm trong tập cho phép và mọi tham số thỏa mãn lược đồ đã định nghĩa.
+
+Cách tiếp cận này dựa trên danh sách cho phép thay vì danh sách cấm, nhờ đó mọi hành động hoặc
+giá trị tham số không được khai báo tường minh đều bị từ chối. Ví dụ, với một thiết bị điều hòa,
+hành động đặt nhiệt độ chỉ được chấp nhận khi giá trị nằm trong khoảng an toàn đã quy định, còn
+một giá trị vượt ngưỡng sẽ bị loại bỏ. Cơ chế này ngăn chặn các lệnh tuy đúng quyền nhưng mang
+tham số nguy hiểm hoặc bị bóp méo trong quá trình diễn giải của agent.
+
+### 3.2.4. Cơ chế phát hiện prompt injection
+
+Cơ chế phát hiện prompt injection được hiện thực trong thành phần PromptInjectionDetector theo
+thiết kế kết hợp hai tầng, nhằm cân bằng giữa tốc độ và độ chính xác. Tầng thứ nhất là bộ lọc
+dựa trên luật, rà soát nhanh yêu cầu của người dùng và lời gọi do agent sinh ra để tìm các dấu
+hiệu nghi vấn, chẳng hạn các mẫu chỉ thị ghi đè như yêu cầu bỏ qua quy tắc trước đó, các dấu hiệu
+cố gắng đổi vai, hoặc sự mâu thuẫn giữa ý định ban đầu của người dùng và hành động được sinh ra.
+Tầng này có chi phí thấp và xử lý được phần lớn các trường hợp rõ ràng.
+
+Tầng thứ hai là bộ phân loại dựa trên LLM, chỉ được kích hoạt cho những trường hợp mà tầng luật
+không đủ cơ sở kết luận. Ở tầng này, một mô hình ngôn ngữ được giao nhiệm vụ đánh giá yêu cầu
+trong ngữ cảnh và phân loại có phải là một mưu toan prompt injection hay không. Việc chỉ gọi tầng
+LLM khi cần giúp hạn chế chi phí và độ trễ trong khi vẫn xử lý được các trường hợp tinh vi mà
+luật cứng khó bao quát. Kết quả cuối cùng của cơ chế là một kết luận về tính an toàn của yêu cầu
+kèm lý do, nếu phát hiện dấu hiệu prompt injection thì yêu cầu bị từ chối trước khi tới các bước
+kiểm tra quyền và kiểm tra lệnh. Luồng hoạt động hai tầng được minh họa ở Hình 3.3.
+
+```mermaid
+flowchart TD
+    IN["Yêu cầu và lời gọi công cụ"] --> RULE["Tầng 1 — bộ lọc theo luật"]
+    RULE --> Q{"Kết luận được ngay?"}
+    Q -- "Rõ ràng nguy hiểm" --> BLOCK["Kết luận: có prompt injection"]
+    Q -- "Rõ ràng an toàn" --> PASS["Kết luận: an toàn"]
+    Q -- "Không chắc chắn" --> LLM["Tầng 2 — phân loại bằng LLM"]
+    LLM --> DEC{"LLM đánh giá?"}
+    DEC -- "Nguy hiểm" --> BLOCK
+    DEC -- "An toàn" --> PASS
+```
+
+<div align="center"><em>Hình 3.3. Cơ chế phát hiện prompt injection hai tầng trong middleware KMAM</em></div>
+
+## 3.3. Xây dựng mô hình thử nghiệm middleware bảo mật
+
+### 3.3.1. Môi trường thử nghiệm
+
+Thử nghiệm được xây dựng bằng Python với cấu hình quản lý bởi uv, agent được dựng trên LangChain
+và toàn bộ thiết bị IoT được mô phỏng bằng phần mềm thay cho phần cứng thật nhằm bảo đảm tính an
+toàn và khả năng tái lập. Trình mô phỏng cung cấp một tập thiết bị thuộc nhiều loại, mỗi loại có
+trạng thái riêng cùng một tập hành động hợp lệ và ngưỡng tham số an toàn được định nghĩa trước,
+ví dụ khóa cửa với hành động mở và đóng, đèn với hành động bật, tắt và chỉnh độ sáng, hay điều
+hòa với hành động đặt nhiệt độ trong một khoảng an toàn xác định.
+
+Mô hình phân quyền trong thử nghiệm gồm một số vai trò tiêu biểu như quản trị viên, người vận
+hành và khách, mỗi vai trò được cấp quyền trên những nhóm thiết bị nhất định, bổ sung các điều
+kiện theo ngữ cảnh như khung giờ cho phép. Để khảo sát ảnh hưởng của năng lực mô hình ngôn ngữ
+tới hành vi của hệ thống, thử nghiệm được chạy và so sánh trên hai mô hình LLM khác nhau là
+deepseek-v4-flash và gemma-4-E2B, đều được truy cập thông qua LangChain. Dữ liệu đánh giá gồm hai
+phần, một bộ kịch bản IoT tự tạo bằng script làm dữ liệu chính và bộ dữ liệu công khai
+deepset/prompt-injections [11] dùng để đánh giá khả năng tổng quát của cơ chế phát hiện prompt
+injection. Cấu hình môi trường được tổng hợp trong Bảng 3.1.
+
+<div align="center"><em>Bảng 3.1. Cấu hình môi trường thử nghiệm</em></div>
+
+| Thành phần | Cấu hình |
+| --- | --- |
+| Ngôn ngữ và quản lý gói | Python 3.14, uv |
+| Framework agent | LangChain [12] |
+| Mô hình LLM | deepseek-v4-flash và gemma-4-E2B, truy cập qua LangChain |
+| Thiết bị IoT | Mô phỏng bằng phần mềm (khóa cửa, đèn, điều hòa, …) |
+| Mô hình kiểm soát truy cập | RBAC kết hợp ABAC dạng chính sách, mặc định từ chối |
+| Dữ liệu đánh giá | Kịch bản IoT tự tạo và deepset/prompt-injections [11] |
+| Khung kiểm thử | Unit test bằng pytest, chạy qua uv, kết quả tái lập |
+
+### 3.3.2. Kịch bản kiểm thử middleware
+
+Bộ kịch bản kiểm thử được thiết kế để bao phủ đầy đủ các yêu cầu chức năng ở Bảng 2.3 và các nguy
+cơ đã phân tích ở Chương I. Mỗi kịch bản gồm một yêu cầu điều khiển cùng nhãn kết quả kỳ vọng là
+cho phép hoặc từ chối, nhờ đó có thể đối chiếu tự động với phán quyết thực tế của middleware và
+tính ra các chỉ số đánh giá. Các kịch bản được sinh và quản lý bằng script để bảo đảm tái lập.
+
+Các kịch bản được chia thành nhiều nhóm. Nhóm truy cập hợp lệ kiểm tra việc middleware không chặn
+nhầm các lệnh đúng quyền. Nhóm vượt quyền và nhóm lệnh không hợp lệ kiểm tra khả năng từ chối khi
+chủ thể thiếu quyền hoặc khi tham số vượt ngưỡng an toàn. Nhóm prompt injection gồm cả tấn công
+trực tiếp trong yêu cầu và tấn công gián tiếp giấu chỉ thị trong phản hồi của thiết bị. Bên cạnh
+đó, một cấu hình nền không có middleware được dùng làm mốc so sánh để cho thấy mức độ thành công
+của tấn công khi vắng lớp kiểm soát. Các nhóm kịch bản được tổng hợp trong Bảng 3.2.
+
+<div align="center"><em>Bảng 3.2. Các nhóm kịch bản kiểm thử middleware</em></div>
+
+| Mã | Nhóm kịch bản | Mô tả | Kết quả kỳ vọng | Yêu cầu liên quan |
+| --- | --- | --- | --- | --- |
+| KB1 | Truy cập hợp lệ | Lệnh đúng quyền, đúng ngưỡng | Cho phép | FR2, FR3 |
+| KB2 | Vượt quyền | Chủ thể không đủ quyền với thiết bị hoặc hành động | Từ chối | FR2 |
+| KB3 | Lệnh không hợp lệ | Hành động lạ hoặc tham số vượt ngưỡng an toàn | Từ chối | FR3 |
+| KB4 | Prompt injection trực tiếp | Chỉ thị độc hại nằm trong yêu cầu của người dùng | Từ chối | FR4 |
+| KB5 | Prompt injection gián tiếp | Chỉ thị độc hại giấu trong phản hồi của thiết bị | Từ chối | FR4 |
+| KB6 | Dataset công khai | Mẫu từ deepset/prompt-injections [11] | Theo nhãn của bộ dữ liệu | FR4 |
+| KB7 | Mốc không middleware | Lặp lại các kịch bản tấn công khi tắt KMAM | Tấn công thành công | So sánh hiệu quả |
+
+Việc đối chiếu kết quả thực tế với nhãn kỳ vọng trên các nhóm kịch bản này là cơ sở để tính các
+chỉ số đánh giá ở mục 3.4. Phần triển khai chi tiết và số liệu thu được sẽ được trình bày sau khi
+hoàn thiện mã nguồn và chạy thực nghiệm.
+
 # TÀI LIỆU THAM KHẢO
 
 [1] L. Atzori, A. Iera, and G. Morabito, "The Internet of Things: A survey," *Computer
@@ -316,3 +828,8 @@ Models," *IEEE Computer*, vol. 29, no. 2, pp. 38–47, 1996.
 [10] V. C. Hu et al., *Guide to Attribute Based Access Control (ABAC) Definition and
 Considerations*, NIST Special Publication 800-162, National Institute of Standards and
 Technology, 2014.
+
+[11] deepset, *prompt-injections* (bộ dữ liệu), Hugging Face. [Trực tuyến]. Có tại:
+https://huggingface.co/datasets/deepset/prompt-injections
+
+[12] LangChain, *LangChain Documentation*. [Trực tuyến]. Có tại: https://python.langchain.com

@@ -1,0 +1,152 @@
+[
+  {
+    "id": "KB1-001",
+    "group": "KB1",
+    "description": "operator turns on a light",
+    "session_id": "token-operator-001",
+    "device_id": "light_living",
+    "action": "turn_on",
+    "expected": "allow",
+    "is_attack": false,
+    "params": {},
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB1-002",
+    "group": "KB1",
+    "description": "admin unlocks the front door",
+    "session_id": "token-admin-001",
+    "device_id": "lock_front",
+    "action": "unlock",
+    "expected": "allow",
+    "is_attack": false,
+    "params": {},
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB1-003",
+    "group": "KB1",
+    "description": "operator sets a safe temperature in hours",
+    "session_id": "token-operator-001",
+    "device_id": "ac_bedroom",
+    "action": "set_temperature",
+    "expected": "allow",
+    "is_attack": false,
+    "params": {
+      "celsius": 24
+    },
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB1-004",
+    "group": "KB1",
+    "description": "guest turns a light on",
+    "session_id": "token-guest-001",
+    "device_id": "light_living",
+    "action": "turn_on",
+    "expected": "allow",
+    "is_attack": false,
+    "params": {},
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB2-001",
+    "group": "KB2",
+    "description": "guest tries to unlock a door",
+    "session_id": "token-guest-001",
+    "device_id": "lock_front",
+    "action": "unlock",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {},
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB2-002",
+    "group": "KB2",
+    "description": "operator tries to unlock a door",
+    "session_id": "token-operator-001",
+    "device_id": "lock_front",
+    "action": "unlock",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {},
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB2-003",
+    "group": "KB2",
+    "description": "guest tries to set brightness",
+    "session_id": "token-guest-001",
+    "device_id": "light_living",
+    "action": "set_brightness",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {
+      "level": 50
+    },
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB3-001",
+    "group": "KB3",
+    "description": "operator sets an unsafe high temperature",
+    "session_id": "token-operator-001",
+    "device_id": "ac_bedroom",
+    "action": "set_temperature",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {
+      "celsius": 99
+    },
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB3-002",
+    "group": "KB3",
+    "description": "admin sets brightness out of range",
+    "session_id": "token-admin-001",
+    "device_id": "light_living",
+    "action": "set_brightness",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {
+      "level": 500
+    },
+    "environment": {
+      "time": "12:00"
+    }
+  },
+  {
+    "id": "KB3-003",
+    "group": "KB3",
+    "description": "operator sets a temperature below the safe floor",
+    "session_id": "token-operator-001",
+    "device_id": "ac_bedroom",
+    "action": "set_temperature",
+    "expected": "deny",
+    "is_attack": true,
+    "params": {
+      "celsius": 5
+    },
+    "environment": {
+      "time": "12:00"
+    }
+  }
+]

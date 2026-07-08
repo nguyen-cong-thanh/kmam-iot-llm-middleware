@@ -1,3 +1,31 @@
+# XÁC NHẬN CỦA GIẢNG VIÊN HƯỚNG DẪN
+
+Nhận xét:
+
+......................................................................................................
+
+......................................................................................................
+
+......................................................................................................
+
+......................................................................................................
+
+......................................................................................................
+
+......................................................................................................
+
+<div align="right">
+
+*Hà Nội, ngày ... tháng ... năm 2026*
+
+Giảng viên hướng dẫn
+
+*(Ký và ghi rõ họ tên)*
+
+**PGS. TS. Trần Thị Lượng**
+
+</div>
+
 # LỜI NÓI ĐẦU
 
 Sự phát triển nhanh chóng của Internet vạn vật (Internet of Things - IoT) đã đưa các thiết bị
@@ -33,7 +61,7 @@ Em xin chân thành cảm ơn!
 
 <div align="right">
 
-*[Địa điểm], tháng 6 năm 2026*
+*Hà Nội, tháng 6 năm 2026*
 
 Sinh viên thực hiện
 
@@ -574,7 +602,7 @@ nêu ở Bảng 2.3, gồm bộ xác thực (Authenticator), bộ phát hiện p
 đường ống xử lý trung tâm và sẽ là các module tương ứng trong phần mã nguồn ở `src/`.
 
 ```mermaid
-flowchart LR
+flowchart TD
     U["Người dùng"] --> AG["LLM Agent<br/>(xây dựng trên LangChain)"]
     AG -->|"lời gọi công cụ"| MW
     subgraph MW["Middleware KMAM"]
@@ -881,9 +909,10 @@ gồm precision, recall, F1 và accuracy được tổng hợp trong Bảng 3.4.
 | | Hai tầng + gemma | 0,99 | 0,50 | 0,67 | 0,73 |
 | | Hai tầng + deepseek | 0,99 | 0,59 | 0,74 | 0,78 |
 
-Kết quả cho thấy bộ phát hiện hai tầng vượt trội so với cấu hình chỉ dùng tầng luật trên mọi bộ
-dữ liệu, và mô hình mạnh hơn (deepseek) cho F1 cao hơn mô hình cục bộ nhỏ (gemma) một cách nhất
-quán. Trên bộ tự tạo, cả ba cấu hình đều đạt kết quả tuyệt đối vì các mẫu tấn công tự tạo đều
+Kết quả cho thấy bộ phát hiện hai tầng vượt trội so với cấu hình chỉ dùng tầng luật trên các bộ
+dữ liệu công khai. Mô hình mạnh hơn là deepseek cho F1 cao hơn mô hình cục bộ nhỏ gemma trên các
+bộ dữ liệu này, tuy khoảng cách không đều, rõ rệt trên bộ jailbreak nhưng gần như không đáng kể
+trên bộ safeguard. Trên bộ tự tạo, cả ba cấu hình đều đạt kết quả tuyệt đối vì các mẫu tấn công tự tạo đều
 tường minh và bị tầng luật bắt hết. Trên các bộ dữ liệu công khai vốn đa dạng và tinh vi hơn,
 khoảng cách năng lực giữa hai mô hình thể hiện rõ, ví dụ trên bộ jailbreak, F1 tăng từ 0,17 ở cấu
 hình chỉ dùng luật lên 0,67 với gemma và 0,74 với deepseek.
@@ -929,7 +958,7 @@ phần lõi của middleware.
 
 Về hiệu năng, nhờ thiết kế hai tầng, chỉ một phần nhỏ yêu cầu phải gọi tới tầng LLM tốn kém, còn
 phần lớn được tầng luật giải quyết ngay với chi phí thấp. Ví dụ trên bộ safeguard gồm 2.060 mẫu,
-chỉ khoảng 110 mẫu tương ứng gần 5% phải chuyển tới tầng LLM, phần còn lại được xử lý bằng bộ lọc
+chỉ khoảng 110 mẫu tương ứng khoảng 5% phải chuyển tới tầng LLM, phần còn lại được xử lý bằng bộ lọc
 luật. Nhờ đó độ trễ và chi phí tăng thêm do middleware được giữ ở mức chấp nhận được, phù hợp với
 yêu cầu phi chức năng đã phân tích.
 

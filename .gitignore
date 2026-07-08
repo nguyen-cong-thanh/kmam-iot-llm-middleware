@@ -11,3 +11,7 @@ wheels/
 
 # Environemnt variables
 .env
+
+# Font binaries dropped into fonts/ (e.g. proprietary times.ttf) — do not commit
+fonts/*.ttf
+fonts/*.otf

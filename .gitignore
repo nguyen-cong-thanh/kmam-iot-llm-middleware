@@ -15,3 +15,6 @@ wheels/
 # Font binaries dropped into fonts/ (e.g. proprietary times.ttf) — do not commit
 fonts/*.ttf
 fonts/*.otf
+
+# Evaluation run logs (runtime artifacts)
+logs/

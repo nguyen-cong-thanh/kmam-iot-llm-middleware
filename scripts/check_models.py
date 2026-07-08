@@ -1,8 +1,8 @@
-"""Live connectivity check for the two LLM backends.
+"""Live connectivity check for the LLM backend.
 
-Makes a real call to each model (gemma via local Ollama, deepseek via API) through the
-LLMClassifier, on one injection and one benign text. Not a unit test: it needs the
-services to be available.
+Makes a real call to each registered model (deepseek via API) through the LLMClassifier,
+on one injection and one benign text. Not a unit test: it needs the service to be
+available (DeepSeek needs VPN).
 
 Run with: uv run python scripts/check_models.py
 """

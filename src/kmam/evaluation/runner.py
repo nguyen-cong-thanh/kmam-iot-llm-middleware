@@ -9,8 +9,9 @@ Three tracks are evaluated:
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from kmam.context import RequestContext, Verdict
 from kmam.detection.detector import PromptInjectionDetector
@@ -109,19 +110,27 @@ def _tally(metrics: ConfusionMetrics, is_injection: bool, predicted: bool) -> No
 
 
 def evaluate_injection_detection(
-    detector: PromptInjectionDetector, samples: list[TextSample]
+    detector: PromptInjectionDetector,
+    samples: list[TextSample],
+    progress: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Score detections against the labels, broken down by the deciding tier.
 
     A deny is treated as 'predicted injection'. Each decision is attributed to the tier
-    that produced it (``rule`` or ``llm``), so the report can show which tier caught what.
+    that produced it (``rule`` or ``llm``). Per-sample and total wall-clock time are
+    recorded. If ``progress`` is given, it is called after each sample with a small event
+    dict so a caller can print live progress on long LLM runs.
     """
     overall = ConfusionMetrics()
     by_tier: dict[str, ConfusionMetrics] = {"rule": ConfusionMetrics(), "llm": ConfusionMetrics()}
     results = []
-    for sample in samples:
+    n = len(samples)
+    t_start = time.perf_counter()
+    for idx, sample in enumerate(samples, 1):
         ctx = RequestContext(session_id="eval", raw_user_request=sample.text)
+        t0 = time.perf_counter()
         decision = detector.detect(ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         predicted = not decision.allowed
         tier = decision.tier or "rule"
         _tally(overall, sample.is_injection, predicted)
@@ -132,11 +141,24 @@ def evaluate_injection_detection(
             "is_injection": sample.is_injection,
             "predicted_injection": predicted,
             "tier": tier,
+            "elapsed_ms": round(elapsed_ms, 1),
         })
+        if progress is not None:
+            progress({
+                "index": idx, "total": n, "sample": sample,
+                "predicted": predicted, "tier": tier,
+                "elapsed_ms": elapsed_ms, "running": overall,
+            })
+    total = time.perf_counter() - t_start
     return {
         "metrics": overall.to_dict(),
         "by_tier": {tier: m.to_dict() for tier, m in by_tier.items()},
         "results": results,
+        "timing": {
+            "total_seconds": round(total, 3),
+            "avg_ms_per_sample": round(total / n * 1000, 2) if n else 0.0,
+            "samples": n,
+        },
     }
 
 

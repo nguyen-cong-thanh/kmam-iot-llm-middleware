@@ -87,6 +87,26 @@ def test_uncertain_escalates_to_llm_and_allows():
     assert fake.calls == 1
 
 
+def test_benign_not_escalated_under_approach_a():
+    # Approach A (default): a rule-tier benign is final, the LLM is not consulted.
+    fake = _FakeChatModel(answer=False)
+    det = PromptInjectionDetector(llm_classifier=LLMClassifier(fake))
+    d = det.detect(_ctx("turn on the living room light"))
+    assert d.allowed
+    assert d.tier == "rule"
+    assert fake.calls == 0
+
+
+def test_benign_escalates_to_llm_under_approach_b():
+    # Approach B: anything the rule tier does not block is re-checked by the LLM.
+    fake = _FakeChatModel(answer=False)
+    det = PromptInjectionDetector(llm_classifier=LLMClassifier(fake), escalate_all=True)
+    d = det.detect(_ctx("turn on the living room light"))
+    assert d.allowed
+    assert d.tier == "llm"
+    assert fake.calls == 1  # benign text still consulted the LLM tier
+
+
 def test_strong_injection_does_not_call_llm():
     fake = _FakeChatModel(answer=False)
     det = PromptInjectionDetector(llm_classifier=LLMClassifier(fake))

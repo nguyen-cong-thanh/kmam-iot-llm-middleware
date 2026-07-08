@@ -1,9 +1,9 @@
 """LangChain integration: build chat models and wire the LLM tier of the detector.
 
-A small factory hides the two backends used in the experiment behind a single
-interface (report section 3.3.1): ``deepseek-v4-flash`` reached through the DeepSeek API
-and ``gemma-4-E2B`` running locally through Ollama. The rest of the system depends only
-on an object exposing ``invoke``, so the choice of model stays isolated here.
+A small factory hides the LLM backend used in the experiment behind a single
+interface (report section 3.3.1): ``deepseek-v4-flash`` reached through the DeepSeek API.
+The rest of the system depends only on an object exposing ``invoke``, so the choice of
+model stays isolated here and a different backend can be added without touching callers.
 """
 
 from __future__ import annotations
@@ -28,10 +28,9 @@ class ModelConfig:
     model: str
 
 
-# The two models compared in Chapter III (report section 3.3.1).
+# The LLM tier backend used in Chapter III (report section 3.3.1).
 MODEL_REGISTRY: dict[str, ModelConfig] = {
     "deepseek": ModelConfig("deepseek", "deepseek-api", "deepseek-v4-flash"),
-    "gemma": ModelConfig("gemma", "ollama-local", "gemma4:e2b"),
 }
 
 
@@ -56,10 +55,6 @@ def build_chat_model(backend: str, model: str, temperature: float = 0.0):
             api_key=api_key,
             extra_body={"thinking": {"type": "disabled"}},
         )
-    if backend == "ollama-local":
-        from langchain_ollama import ChatOllama
-
-        return ChatOllama(model=model, temperature=temperature)
     raise ValueError(f"unknown backend: {backend}")
 
 
@@ -73,11 +68,17 @@ def build_llm_detector(
     name: str,
     temperature: float = 0.0,
     uncertain_default: Verdict = Verdict.ALLOW,
+    escalate_all: bool = False,
 ) -> PromptInjectionDetector:
-    """Build a two-tier detector whose LLM tier is backed by the named model."""
+    """Build a two-tier detector whose LLM tier is backed by the named model.
+
+    ``escalate_all`` selects the escalation strategy (approach A vs B, see
+    :class:`~kmam.detection.detector.PromptInjectionDetector`).
+    """
     chat_model = build_model_by_name(name, temperature)
     return PromptInjectionDetector(
         rule_filter=RuleFilter(),
         llm_classifier=LLMClassifier(chat_model),
         uncertain_default=uncertain_default,
+        escalate_all=escalate_all,
     )

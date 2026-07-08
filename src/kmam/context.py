@@ -40,11 +40,16 @@ class RequestContext:
 
 @dataclass
 class Decision:
-    """Verdict returned by a check stage, with the reason and originating stage."""
+    """Verdict returned by a check stage, with the reason and originating stage.
+
+    ``tier`` is set by the prompt injection detector to record which tier settled the
+    case ("rule" or "llm"), so evaluation can attribute detections per tier.
+    """
 
     verdict: Verdict
     reason: str = ""
     stage: str = ""
+    tier: str | None = None
 
     @property
     def allowed(self) -> bool:

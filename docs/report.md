@@ -792,8 +792,189 @@ của tấn công khi vắng lớp kiểm soát. Các nhóm kịch bản đượ
 | KB7 | Mốc không middleware | Lặp lại các kịch bản tấn công khi tắt KMAM | Tấn công thành công | So sánh hiệu quả |
 
 Việc đối chiếu kết quả thực tế với nhãn kỳ vọng trên các nhóm kịch bản này là cơ sở để tính các
-chỉ số đánh giá ở mục 3.4. Phần triển khai chi tiết và số liệu thu được sẽ được trình bày sau khi
-hoàn thiện mã nguồn và chạy thực nghiệm.
+chỉ số đánh giá ở mục 3.4.
+
+### 3.3.3. Triển khai middleware trong môi trường mô phỏng
+
+Mô hình đề xuất được hiện thực bằng Python dưới dạng một package có tên KMAM, trong đó mỗi thành
+phần của kiến trúc ở Hình 3.1 tương ứng với một module riêng và mang đúng tên đã dùng trong thiết
+kế. Bộ xác thực (Authenticator), bộ phát hiện prompt injection (PromptInjectionDetector), bộ kiểm
+soát truy cập (AccessControlEngine), bộ kiểm tra lệnh (CommandValidator) và bộ ghi nhật ký
+(AuditLogger) được điều phối bởi một đường ống xử lý trung tâm (SecurityMiddleware) theo đúng
+trình tự mặc định từ chối ở Hình 3.2.
+
+Thiết bị IoT được mô phỏng bằng một trình mô phỏng (DeviceSimulator) đọc đặc tả thiết bị từ tệp
+cấu hình. Toàn bộ chính sách kiểm soát truy cập gồm vai trò, quyền và điều kiện ngữ cảnh, cùng
+đặc tả thiết bị gồm tập hành động hợp lệ và ngưỡng tham số an toàn, được khai báo trong các tệp
+cấu hình dạng YAML tách rời khỏi mã nguồn, đúng theo hướng tiếp cận policy-based ở mục 2.3.3. Nhờ
+đó có thể thay đổi chính sách hoặc bổ sung thiết bị mà không phải sửa phần lõi của middleware.
+
+LLM Agent được tích hợp thông qua LangChain. Lớp công cụ điều khiển được bọc lại để mọi lời gọi
+đều đi qua middleware trước khi tới trình mô phỏng. Bộ phát hiện prompt injection được hiện thực
+theo thiết kế hai tầng ở mục 3.2.4, trong đó tầng thứ nhất là bộ lọc theo luật dùng biểu thức
+chính quy (regular expression) và tầng thứ hai là bộ phân loại dựa trên LLM chỉ được gọi cho các
+trường hợp không chắc chắn. Bộ phân loại yêu cầu mô hình trả về kết quả có cấu trúc (structured
+output) thay vì văn bản tự do để việc đọc phán quyết được ổn định giữa các mô hình. Thực nghiệm
+sử dụng hai mô hình ngôn ngữ đã nêu ở mục 3.3.1, trong đó mô hình gọi qua API được cấu hình ở chế
+độ non-thinking để tương thích với đầu ra có cấu trúc, còn mô hình cục bộ chạy qua Ollama.
+
+Nhằm bảo đảm kết quả tái lập được, các kịch bản kiểm thử và quy trình đánh giá được đóng gói thành
+script. Một script sinh bộ kịch bản, một script chạy toàn bộ đánh giá và xuất kết quả ra thư mục
+kết quả dưới dạng tệp số liệu. Các logic kiểm soát truy cập, kiểm tra lệnh và phát hiện prompt
+injection đều có unit test chạy bằng pytest, cho kết quả nhất quán qua các lần chạy.
+
+## 3.4. Đánh giá hiệu quả mô hình đề xuất
+
+Phần này đánh giá middleware KMAM trên ba khía cạnh: khả năng kiểm soát truy cập thiết bị, khả
+năng phòng chống prompt injection và khả năng tích hợp hệ thống. Mọi số liệu được lấy trực tiếp
+từ output của chương trình khi chạy trên các nhóm kịch bản ở mục 3.3.2 và các bộ dữ liệu công
+khai, đều có thể tái lập bằng script.
+
+### 3.4.1. Đánh giá khả năng kiểm soát truy cập thiết bị
+
+Khả năng kiểm soát truy cập được đánh giá bằng cách đối chiếu phán quyết của middleware với nhãn
+kỳ vọng trên các nhóm kịch bản KB1 đến KB3. Kết quả cho thấy middleware phán quyết chính xác toàn
+bộ mười kịch bản, đạt độ chính xác tuyệt đối. Các lệnh hợp lệ đều được cho phép, trong khi các
+lệnh vượt quyền và các lệnh có tham số vượt ngưỡng an toàn đều bị từ chối đúng như thiết kế. Chi
+tiết được trình bày trong Bảng 3.3.
+
+<div align="center"><em>Bảng 3.3. Kết quả kiểm soát truy cập trên các nhóm kịch bản</em></div>
+
+| Nhóm kịch bản | Số kịch bản | Kết quả kỳ vọng | Số phán quyết đúng |
+| --- | --- | --- | --- |
+| KB1 – Truy cập hợp lệ | 4 | Cho phép | 4/4 |
+| KB2 – Vượt quyền | 3 | Từ chối | 3/3 |
+| KB3 – Lệnh không hợp lệ | 3 | Từ chối | 3/3 |
+| Tổng | 10 | | 10/10 (độ chính xác 1,0) |
+
+Để làm rõ vai trò của middleware, các kịch bản tấn công điều khiển ở KB2 và KB3 được chạy lại
+trong cấu hình nền không có middleware (KB7). Khi vắng lớp kiểm soát, toàn bộ sáu lệnh tấn công
+đều được trình mô phỏng thực thi, tương ứng tỷ lệ tấn công thành công 100%. Khi có middleware,
+không lệnh tấn công nào được thực thi, tỷ lệ tấn công thành công giảm về 0%. Kết quả này cho thấy
+middleware ngăn chặn hiệu quả cả hành vi truy cập trái phép lẫn các lệnh mang tham số nguy hiểm,
+những hành vi vốn tác động trực tiếp tới thế giới vật lý nếu không được kiểm soát.
+
+### 3.4.2. Đánh giá khả năng phòng chống tấn công prompt injection
+
+Cơ chế phát hiện prompt injection được đánh giá như một bài toán phân loại nhị phân, trong đó một
+phán quyết từ chối được coi là dự đoán "có injection". Việc đánh giá thực hiện trên bộ kịch bản
+tự tạo cùng ba bộ dữ liệu công khai là deepset/prompt-injections [11],
+xTRam1/safe-guard-prompt-injection [13] và jackhhao/jailbreak-classification [14]. Ba cấu hình
+được so sánh gồm bộ phát hiện chỉ dùng tầng luật, bộ phát hiện hai tầng với mô hình cục bộ
+(gemma-4-E2B) và bộ phát hiện hai tầng với mô hình gọi qua API (deepseek-v4-flash). Các chỉ số
+gồm precision, recall, F1 và accuracy được tổng hợp trong Bảng 3.4.
+
+<div align="center"><em>Bảng 3.4. Kết quả phát hiện prompt injection trên các bộ dữ liệu</em></div>
+
+| Bộ dữ liệu | Bộ phát hiện | Precision | Recall | F1 | Accuracy |
+| --- | --- | --- | --- | --- | --- |
+| Tự tạo (12) | Chỉ tầng luật | 1,00 | 1,00 | 1,00 | 1,00 |
+| | Hai tầng + gemma | 1,00 | 1,00 | 1,00 | 1,00 |
+| | Hai tầng + deepseek | 1,00 | 1,00 | 1,00 | 1,00 |
+| deepset (116) | Chỉ tầng luật | 0,00 | 0,00 | 0,00 | 0,48 |
+| | Hai tầng + gemma | 1,00 | 0,10 | 0,18 | 0,53 |
+| | Hai tầng + deepseek | 1,00 | 0,18 | 0,31 | 0,58 |
+| safeguard (2060) | Chỉ tầng luật | 1,00 | 0,16 | 0,27 | 0,73 |
+| | Hai tầng + gemma | 1,00 | 0,26 | 0,41 | 0,77 |
+| | Hai tầng + deepseek | 0,99 | 0,27 | 0,42 | 0,77 |
+| jailbreak (262) | Chỉ tầng luật | 0,93 | 0,09 | 0,17 | 0,52 |
+| | Hai tầng + gemma | 0,99 | 0,50 | 0,67 | 0,73 |
+| | Hai tầng + deepseek | 0,99 | 0,59 | 0,74 | 0,78 |
+
+Kết quả cho thấy bộ phát hiện hai tầng vượt trội so với cấu hình chỉ dùng tầng luật trên mọi bộ
+dữ liệu, và mô hình mạnh hơn (deepseek) cho F1 cao hơn mô hình cục bộ nhỏ (gemma) một cách nhất
+quán. Trên bộ tự tạo, cả ba cấu hình đều đạt kết quả tuyệt đối vì các mẫu tấn công tự tạo đều
+tường minh và bị tầng luật bắt hết. Trên các bộ dữ liệu công khai vốn đa dạng và tinh vi hơn,
+khoảng cách năng lực giữa hai mô hình thể hiện rõ, ví dụ trên bộ jailbreak, F1 tăng từ 0,17 ở cấu
+hình chỉ dùng luật lên 0,67 với gemma và 0,74 với deepseek.
+
+Để làm rõ đóng góp của từng tầng, Bảng 3.5 tách riêng hiệu quả của tầng LLM trên đúng những
+trường hợp được tầng luật chuyển tiếp (escalate). Trên tập con này, deepseek đạt recall gần như
+tuyệt đối, còn gemma thấp hơn đáng kể, khẳng định lại chênh lệch năng lực giữa hai mô hình khi xử
+lý các trường hợp khó.
+
+<div align="center"><em>Bảng 3.5. Hiệu quả của tầng LLM trên các trường hợp được escalate</em></div>
+
+| Bộ dữ liệu | Số ca escalate | Recall tầng LLM (gemma) | Recall tầng LLM (deepseek) |
+| --- | --- | --- | --- |
+| deepset | 11 | 0,55 | 1,00 |
+| safeguard | 110 | 0,89 | 0,99 |
+| jailbreak | 71 | 0,83 | 1,00 |
+
+Một đặc điểm quan trọng nằm ở tầng luật. Trên tổng cộng khoảng 2.450 mẫu của các bộ dữ liệu công
+khai, tầng luật chỉ tạo ra một trường hợp cảnh báo nhầm (false positive), tức gần như không bao
+giờ chặn nhầm một yêu cầu hợp lệ. Đây là lựa chọn thiết kế có chủ đích, bởi trong hệ thống điều
+khiển thiết bị IoT, việc chặn nhầm một lệnh hợp lệ gây ảnh hưởng nghiêm trọng tới khả năng sử
+dụng. Do đó tầng luật được giữ hẹp để ưu tiên precision, đóng vai trò bộ lọc nhanh cho các mẫu
+tấn công hiển nhiên, còn nhiệm vụ phân loại các trường hợp mơ hồ được giao cho tầng LLM.
+
+Hệ quả của lựa chọn này là recall tổng thể bị giới hạn bởi số lượng trường hợp được escalate, vì
+nhiều mẫu injection tinh vi hoặc thuộc ngôn ngữ khác tiếng Anh bị tầng luật xem là an toàn và
+không được chuyển tiếp tới tầng LLM. Đây không phải là khuyết điểm kỹ thuật mà là sự đánh đổi có ý
+thức giữa mức độ an toàn và khả năng sử dụng của hệ thống với độ phủ phát hiện. Việc sử dụng một
+mô hình ngôn ngữ mạnh hơn ở tầng hai là hướng trực tiếp để nâng độ phủ mà vẫn giữ được precision
+cao.
+
+### 3.4.3. Đánh giá khả năng tích hợp hệ thống
+
+Về khả năng tích hợp framework agent, middleware được ghép với LangChain bằng cách bọc lớp công
+cụ điều khiển mà không phải sửa đổi mô hình ngôn ngữ. Cùng một middleware vận hành được với hai
+backend khác nhau, gồm một mô hình gọi qua API và một mô hình cục bộ chạy qua Ollama, chỉ thông
+qua một factory dựng mô hình. Điều này cho thấy middleware độc lập với mô hình và framework cụ
+thể, đáp ứng yêu cầu tích hợp đã nêu ở mục 2.4.2.
+
+Về khả năng mở rộng, thiết bị, vai trò và chính sách đều được khai báo trong các tệp cấu hình
+tách rời khỏi mã nguồn, nên việc bổ sung thiết bị mới hay thay đổi chính sách không đòi hỏi sửa
+phần lõi của middleware.
+
+Về hiệu năng, nhờ thiết kế hai tầng, chỉ một phần nhỏ yêu cầu phải gọi tới tầng LLM tốn kém, còn
+phần lớn được tầng luật giải quyết ngay với chi phí thấp. Ví dụ trên bộ safeguard gồm 2.060 mẫu,
+chỉ khoảng 110 mẫu tương ứng gần 5% phải chuyển tới tầng LLM, phần còn lại được xử lý bằng bộ lọc
+luật. Nhờ đó độ trễ và chi phí tăng thêm do middleware được giữ ở mức chấp nhận được, phù hợp với
+yêu cầu phi chức năng đã phân tích.
+
+Cuối cùng, toàn bộ cơ chế được kiểm thử tự động bằng pytest và các kịch bản đánh giá được đóng gói
+thành script, bảo đảm hệ thống có thể kiểm chứng và tái lập, thuận lợi cho việc tích hợp và bảo
+trì về sau.
+
+## 3.5. Đề xuất hướng phát triển mở rộng
+
+### 3.5.1. Mở rộng kiểm soát đa thiết bị IoT
+
+Thực nghiệm hiện tại sử dụng một tập thiết bị mô phỏng ở quy mô vừa phải. Hướng phát triển tự
+nhiên là mở rộng sang các hệ thống có số lượng lớn thiết bị thuộc nhiều chủng loại và giao thức
+khác nhau, kèm theo cơ chế tổ chức thiết bị theo nhóm phân cấp để quản lý chính sách hiệu quả và
+tránh tình trạng bùng nổ quy tắc. Ở quy mô lớn, việc thực thi kiểm soát có thể được phân tán trên
+nhiều phiên bản middleware đặt gần thiết bị nhằm giảm độ trễ, đồng thời cần xử lý các kịch bản
+điều khiển liên thiết bị khi một lệnh tác động đồng thời tới nhiều thiết bị.
+
+### 3.5.2. Tích hợp cơ chế học máy phát hiện bất thường
+
+Cơ chế phát hiện hiện tại đánh giá từng yêu cầu một cách độc lập. Như kết quả ở mục 3.4.2 cho
+thấy, cách tiếp cận này bị giới hạn về độ phủ đối với các mẫu tấn công tinh vi. Một hướng bổ sung
+là tích hợp mô hình học máy phát hiện bất thường dựa trên hành vi, phân tích chuỗi lệnh, tần suất
+và ngữ cảnh thời gian để nhận diện các chuỗi tấn công mà từng lệnh riêng lẻ không bộc lộ, chẳng
+hạn hành vi dò quyền dần dần. Ngoài ra, có thể sử dụng một bộ phân loại chuyên biệt được tinh
+chỉnh riêng cho bài toán phát hiện prompt injection như một lựa chọn thay thế cho tầng LLM với chi
+phí và độ trễ thấp hơn, qua đó nâng độ phủ mà vẫn kiểm soát được chi phí.
+
+### 3.5.3. Ứng dụng middleware trong hệ thống smart environment
+
+Cuối cùng, middleware cần được đưa từ môi trường mô phỏng ra các hệ thống môi trường thông minh
+thực tế như nhà thông minh, nhà máy thông minh hay y tế thông minh. Việc này đòi hỏi tích hợp với
+các nền tảng và giao thức IoT thực tế, kết nối với hệ thống xác thực thực tế như OAuth hoặc xác
+thực lẫn nhau ở tầng kết nối, và đánh giá dưới tải vận hành thực nhằm kiểm chứng tính khả dụng và
+hiệu năng của mô hình trong điều kiện triển khai.
+
+Tóm lại, Chương III đã đề xuất kiến trúc middleware bảo mật KMAM đóng vai trò điểm thực thi chính
+sách độc lập giữa LLM Agent và thiết bị IoT, thiết kế chi tiết bốn cơ chế xác thực, kiểm soát
+truy cập, kiểm tra lệnh và phát hiện prompt injection, đồng thời xây dựng thử nghiệm và đánh giá
+trên môi trường mô phỏng. Kết quả cho thấy middleware kiểm soát truy cập chính xác tuyệt đối trên
+các kịch bản thiết kế và ngăn chặn hoàn toàn các lệnh tấn công so với cấu hình không có lớp kiểm
+soát. Cơ chế phát hiện prompt injection hai tầng đạt precision cao và cho thấy vai trò rõ rệt của
+tầng LLM, trong đó mô hình mạnh hơn cải thiện độ phủ một cách nhất quán. Những kết quả này khẳng
+định tính khả thi của mô hình middleware như một lớp bảo vệ trung gian cho hệ thống điều khiển
+thiết bị IoT sử dụng LLM Agent.
 
 # TÀI LIỆU THAM KHẢO
 
@@ -833,3 +1014,9 @@ Technology, 2014.
 https://huggingface.co/datasets/deepset/prompt-injections
 
 [12] LangChain, *LangChain Documentation*. [Trực tuyến]. Có tại: https://python.langchain.com
+
+[13] xTRam1, *safe-guard-prompt-injection* (bộ dữ liệu), Hugging Face. [Trực tuyến]. Có tại:
+https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection
+
+[14] J. Hao, *jailbreak-classification* (bộ dữ liệu), Hugging Face. [Trực tuyến]. Có tại:
+https://huggingface.co/datasets/jackhhao/jailbreak-classification

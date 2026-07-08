@@ -2,6 +2,7 @@
 
 from kmam.evaluation.runner import (
     ConfusionMetrics,
+    analyze_rule_tier,
     evaluate_access_control,
     evaluate_baseline,
     evaluate_injection_detection,
@@ -17,6 +18,7 @@ __all__ = [
     "ConfusionMetrics",
     "ControlScenario",
     "TextSample",
+    "analyze_rule_tier",
     "evaluate_access_control",
     "evaluate_baseline",
     "evaluate_injection_detection",

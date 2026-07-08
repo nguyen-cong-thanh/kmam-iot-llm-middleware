@@ -14,6 +14,7 @@ from typing import Any
 
 from kmam.context import RequestContext, Verdict
 from kmam.detection.detector import PromptInjectionDetector
+from kmam.detection.rules import RuleFilter, Signal
 from kmam.devices.simulator import DeviceSimulator
 from kmam.evaluation.scenarios import ControlScenario, TextSample
 from kmam.middleware import SecurityMiddleware
@@ -96,30 +97,87 @@ def evaluate_access_control(
     }
 
 
+def _tally(metrics: ConfusionMetrics, is_injection: bool, predicted: bool) -> None:
+    if is_injection and predicted:
+        metrics.tp += 1
+    elif is_injection and not predicted:
+        metrics.fn += 1
+    elif not is_injection and predicted:
+        metrics.fp += 1
+    else:
+        metrics.tn += 1
+
+
 def evaluate_injection_detection(
     detector: PromptInjectionDetector, samples: list[TextSample]
 ) -> dict[str, Any]:
-    """Treat a deny as 'predicted injection' and score against the labels."""
-    metrics = ConfusionMetrics()
+    """Score detections against the labels, broken down by the deciding tier.
+
+    A deny is treated as 'predicted injection'. Each decision is attributed to the tier
+    that produced it (``rule`` or ``llm``), so the report can show which tier caught what.
+    """
+    overall = ConfusionMetrics()
+    by_tier: dict[str, ConfusionMetrics] = {"rule": ConfusionMetrics(), "llm": ConfusionMetrics()}
     results = []
     for sample in samples:
         ctx = RequestContext(session_id="eval", raw_user_request=sample.text)
-        predicted_injection = not detector.detect(ctx).allowed
-        if sample.is_injection and predicted_injection:
-            metrics.tp += 1
-        elif sample.is_injection and not predicted_injection:
-            metrics.fn += 1
-        elif not sample.is_injection and predicted_injection:
-            metrics.fp += 1
-        else:
-            metrics.tn += 1
+        decision = detector.detect(ctx)
+        predicted = not decision.allowed
+        tier = decision.tier or "rule"
+        _tally(overall, sample.is_injection, predicted)
+        _tally(by_tier.setdefault(tier, ConfusionMetrics()), sample.is_injection, predicted)
         results.append({
             "id": sample.id,
             "group": sample.group,
             "is_injection": sample.is_injection,
-            "predicted_injection": predicted_injection,
+            "predicted_injection": predicted,
+            "tier": tier,
         })
-    return {"metrics": metrics.to_dict(), "results": results}
+    return {
+        "metrics": overall.to_dict(),
+        "by_tier": {tier: m.to_dict() for tier, m in by_tier.items()},
+        "results": results,
+    }
+
+
+def analyze_rule_tier(samples: list[TextSample]) -> dict[str, Any]:
+    """Evaluate the regex rule tier alone and list the samples it misclassifies.
+
+    This is deterministic (no LLM). It captures where the rule tier is confidently wrong
+    so the patterns can be tuned: false positives mean the rules over-filter (block a
+    benign text), false negatives mean an injection leaks past the rules as benign.
+    Cases marked UNCERTAIN are not counted as errors, since they are escalated to the LLM.
+    """
+    rule_filter = RuleFilter()
+    metrics = ConfusionMetrics()
+    escalated = 0
+    false_positives = []  # benign text the rules flagged as malicious (over-filtering)
+    false_negatives = []  # injection text the rules passed as benign (leak)
+    for sample in samples:
+        result = rule_filter.inspect(sample.text)
+        if result.signal is Signal.UNCERTAIN:
+            escalated += 1
+            continue
+        predicted = result.signal is Signal.MALICIOUS
+        _tally(metrics, sample.is_injection, predicted)
+        record = {
+            "id": sample.id,
+            "group": sample.group,
+            "text": sample.text,
+            "is_injection": sample.is_injection,
+            "rule_signal": result.signal.value,
+            "rule_reason": result.reason,
+        }
+        if predicted and not sample.is_injection:
+            false_positives.append(record)
+        elif not predicted and sample.is_injection:
+            false_negatives.append(record)
+    return {
+        "settled_metrics": metrics.to_dict(),
+        "escalated_to_llm": escalated,
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
+    }
 
 
 def evaluate_baseline(

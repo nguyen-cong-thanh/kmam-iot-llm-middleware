@@ -15,6 +15,12 @@ from kmam.detection.rules import RuleFilter, Signal
 STAGE = "prompt_injection"
 
 
+def _tagged(decision: Decision, tier: str) -> Decision:
+    """Record which tier ("rule" or "llm") produced the decision."""
+    decision.tier = tier
+    return decision
+
+
 class PromptInjectionDetector:
     """Combines the rule filter and the optional LLM classifier."""
 
@@ -35,17 +41,19 @@ class PromptInjectionDetector:
         result = self.rule_filter.inspect(self._text(ctx))
 
         if result.signal is Signal.MALICIOUS:
-            return Decision.deny(STAGE, f"rule tier: {result.reason}")
+            return _tagged(Decision.deny(STAGE, f"rule tier: {result.reason}"), "rule")
         if result.signal is Signal.BENIGN:
-            return Decision.allow(STAGE, "rule tier: no injection signal")
+            return _tagged(Decision.allow(STAGE, "rule tier: no injection signal"), "rule")
 
         # Uncertain: escalate to the LLM tier if available.
         if self.llm_classifier is not None:
             classification = self.llm_classifier.classify(self._text(ctx))
             if classification.is_injection:
-                return Decision.deny(STAGE, classification.reason)
-            return Decision.allow(STAGE, classification.reason)
+                return _tagged(Decision.deny(STAGE, classification.reason), "llm")
+            return _tagged(Decision.allow(STAGE, classification.reason), "llm")
 
         if self.uncertain_default is Verdict.DENY:
-            return Decision.deny(STAGE, "uncertain and no classifier available")
-        return Decision.allow(STAGE, "uncertain, allowed by default (rule-only mode)")
+            return _tagged(Decision.deny(STAGE, "uncertain and no classifier available"), "rule")
+        return _tagged(
+            Decision.allow(STAGE, "uncertain, allowed by default (rule-only mode)"), "rule"
+        )

@@ -2,6 +2,7 @@
 
 from kmam.evaluation import (
     ConfusionMetrics,
+    analyze_rule_tier,
     evaluate_access_control,
     evaluate_baseline,
     evaluate_injection_detection,
@@ -41,6 +42,17 @@ def test_injection_detection_has_no_false_positives():
     metrics = report["metrics"]
     assert metrics["fp"] == 0  # benign requests are not flagged by the rule tier
     assert metrics["recall"] >= 0.8
+    # Rule-only detector settles everything at the rule tier.
+    assert "rule" in report["by_tier"]
+    assert all(r["tier"] == "rule" for r in report["results"])
+
+
+def test_analyze_rule_tier_lists_errors():
+    report = analyze_rule_tier(generate_injection_samples())
+    # Self-made benign samples must not be over-filtered by the regex tier.
+    assert report["false_positives"] == []
+    assert "escalated_to_llm" in report
+    assert "false_negatives" in report
 
 
 def test_baseline_shows_attacks_succeed_without_middleware():
